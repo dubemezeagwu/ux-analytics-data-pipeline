@@ -3,10 +3,11 @@ import json
 import uuid
 import random
 import time
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 API_URL = "http://localhost:5000/send_event"
 
-# Sample pages and elements
 PAGES = [
     "https://example.com/home",
     "https://example.com/products",
@@ -20,32 +21,50 @@ ELEMENTS = [
     {"selector": "#link1", "text": "Read More", "type": "link"},
     {"selector": "#input-email", "text": "", "type": "input"},
     {"selector": "#form-checkout", "text": "Checkout", "type": "form"},
+    {"selector": "#search-bar", "text": "", "type": "input"},
+    {"selector": "#dropdown-menu", "text": "Select Option", "type": "dropdown"},
 ]
 
 EVENT_TYPES = ["page_view", "click", "scroll", "form_submit", "hover", "keydown"]
 
-def generate_random_event():
-    user_id = str(random.randint(1, 5))
-    session_id = str(uuid.uuid4())  # New session per event
+USER_IDS = [str(i) for i in range(1, 1000)]  # 1000 users
+COMPANY_NAMES = ["TechCorp", "RetailX", "FinanceHub", "EduPlus", "HealthSync"]
+SUBSCRIPTION_TIERS = ["free", "basic", "pro", "enterprise"]
+REGIONS = ["North America", "Europe", "Asia", "Australia"]
+
+# Creating company IDs and assigning users to companies
+COMPANY_IDS = {user_id: str(uuid.uuid4()) for user_id in USER_IDS}
+COMPANIES = {
+    company_id: {
+        "name": random.choice(COMPANY_NAMES),
+        "subscription_tier": random.choice(SUBSCRIPTION_TIERS),
+        "region": random.choice(REGIONS),
+    }
+    for company_id in COMPANY_IDS.values()
+}
+
+# Assign each user a company based on their user_id
+USER_COMPANIES = {user_id: COMPANY_IDS[user_id] for user_id in USER_IDS}
+
+def generate_random_event(user_id, session_id, timestamp):
     event_type = random.choice(EVENT_TYPES)
     page_url = random.choice(PAGES)
     element = random.choice(ELEMENTS)
     
-    # Simulate additional fields
     device_type = random.choice(["Mobile", "Tablet", "Desktop"])
     browser = random.choice(["Chrome", "Firefox", "Safari", "Edge"])
     os = random.choice(["Windows", "Mac OS", "iOS", "Android"])
     country = random.choice(["USA", "India", "Germany", "Brazil", "UK"])
     city = random.choice(["New York", "London", "Berlin", "Mumbai", "Sydney"])
-    region = random.choice(["North America", "Europe", "Asia", "Australia"])
+    region = random.choice(REGIONS)
+    company_id = USER_COMPANIES[user_id]
 
-    # Generate the event payload based on the schema
     event_data = {
         "event_id": str(uuid.uuid4()),
-        "event_timestamp": int(time.time()),  # Event timestamp in seconds
+        "event_timestamp": int(timestamp.timestamp()),
         "user_id": user_id,
         "session_id": session_id,
-        "company_id": "new_company1",  # Generate a random company_id
+        "company_id": company_id,
         "event_type": event_type,
         "page_url": page_url,
         "element_selector": element["selector"] if event_type in ["click", "hover", "keydown"] else None,
@@ -65,21 +84,21 @@ def generate_random_event():
         "country": country,
         "city": city,
         "region": region,
-        "x_coordinate": random.randint(0, 1920) if event_type in ["click", "hover"] else 0,
-        "y_coordinate": random.randint(0, 1080) if event_type in ["click", "hover"] else 0,
-        "session_duration_seconds": random.randint(60, 1800),  # Random session duration
-        "metadata": json.dumps({"custom_data": "value"})  # Example custom data
+        "x_coordinate": random.randint(0, 1920) if event_type in ["click", "hover"] else None,
+        "y_coordinate": random.randint(0, 1080) if event_type in ["click", "hover"] else None,
+        "session_duration_seconds": random.randint(60, 1800),
+        "metadata": json.dumps({"custom_data": "value"})
     }
 
-    # Additional event-specific data
+    # Add extra data for specific event types
     if event_type == "scroll":
-        event_data["scroll_depth"] = random.randint(10, 100)  # Scroll depth in percentage
+        event_data["scroll_depth"] = random.randint(10, 100)
     elif event_type == "keydown":
         event_data["key_pressed"] = random.choice(["Enter", "Backspace", "ArrowDown", "Space"])
     elif event_type == "form_submit":
         event_data["form_id"] = element["selector"]
         event_data["form_data"] = json.dumps({"email": "test@example.com", "password": "******"})
-
+    
     return event_data
 
 def send_event(event_data):
@@ -88,14 +107,22 @@ def send_event(event_data):
         headers={"Content-Type": "application/json"},
         data=json.dumps(event_data)
     )
-
     if response.status_code == 200:
         print("Event sent successfully:", response.json())
     else:
         print("Error sending event:", response.text)
 
+def process_user(user_id):
+    for _ in range(10):  # Each user visits 10 times a month
+        session_id = str(uuid.uuid4())
+        session_start = datetime.utcnow() - timedelta(days=random.randint(1, 30))
+        for _ in range(random.randint(5, 15)):  # 5 to 15 events per session
+            event_time = session_start + timedelta(seconds=random.randint(1, 600))
+            event = generate_random_event(user_id, session_id, event_time)
+            send_event(event)
+            # time.sleep(random.uniform(0.1, 0.5))  # Optional sleep if needed
+
 if __name__ == "__main__":
-    for _ in range(50):  # Generate 50 events
-        event = generate_random_event()
-        send_event(event)
-        time.sleep(random.uniform(0.5, 0.6))  # Simulating real user activity delays
+    with ThreadPoolExecutor(max_workers=200) as executor:
+        # Execute the function for each user in parallel
+        executor.map(process_user, USER_IDS)

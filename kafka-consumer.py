@@ -58,11 +58,11 @@ for message in consumer:
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                str(event["event_id"]),   # Convert UUID to string
+                str(event["event_id"]),
                 event_timestamp,
                 str(event["user_id"]),
                 str(event["session_id"]),
-                str(event["company_id"]),  # Ensure company_id is UUID as string
+                str(event["company_id"]) if event["company_id"] is not None else None,
                 event["event_type"],
                 event["page_url"],
                 event["element_selector"],
@@ -78,12 +78,13 @@ for message in consumer:
                 event["country"],
                 event["city"],
                 event["region"],
-                int(event["x_coordinate"]),
-                int(event["y_coordinate"]),
+                event["x_coordinate"] if event["x_coordinate"] is not None else None,
+                event["y_coordinate"] if event["y_coordinate"] is not None else None,
                 int(event["session_duration_seconds"]),
-                json.dumps(event["metadata"])  # Storing the metadata as JSON
+                json.dumps(event["metadata"])
             )
         )
+
         conn.commit()
         print("✅ Event inserted into database successfully.")
     
