@@ -1,17 +1,52 @@
-import kafka
 import json
 import time
 import uuid
+import threading
+import kafka
+import asyncpg
 from flask import Flask, request, jsonify
+import asyncio
 
 app = Flask(__name__)
 
+# Kafka producer
 producer = kafka.KafkaProducer(
     bootstrap_servers='localhost:9092',
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
 topic = "user_events"
+
+# In-memory set to store company IDs
+company_set = set()
+
+# PostgreSQL connection details
+DB_CONFIG = {
+    "user": "admin",
+    "password": "admin",
+    "database": "events_db",
+    "host": "localhost",
+    "port": 5432
+}
+
+# Function to refresh company_set every 5 minutes
+async def refresh_company_set():
+    global company_set
+    while True:
+        try:
+            conn = await asyncpg.connect(**DB_CONFIG)
+            rows = await conn.fetch("SELECT company_id FROM company")
+            await conn.close()
+            
+            company_set = {str(row["company_id"]) for row in rows}
+            print(f"Updated company_set with {len(company_set)} companies.")
+        except Exception as e:
+            print(f"Error updating company_set: {e}")
+        
+        time.sleep(300)  # Refresh every 5 minutes
+
+# Start background thread to update company_set
+threading.Thread(target=lambda: asyncio.run(refresh_company_set()), daemon=True).start()
 
 @app.route("/send_event", methods=["POST"])
 def send_event():
@@ -26,13 +61,18 @@ def send_event():
     if data["event_type"] not in allowed_event_types:
         return jsonify({"error": "Invalid event type"}), 400
     
-    # Construct event object with new schema
+    # Validate company_id
+    company_id = data.get("company_id")
+    if company_id and company_id not in company_set:
+        return jsonify({"error": "Company not found ", "company_id": company_id}), 403  # Drop event if company is not in DB
+    
+    # Construct event object
     event = {
-        "event_id": str(uuid.uuid4()),  # Generate new event ID
-        "event_timestamp": int(time.time()),  # Current Unix timestamp
+        "event_id": str(uuid.uuid4()),
+        "event_timestamp": data["event_timestamp"],
         "user_id": data["user_id"],
         "session_id": data["session_id"],
-        "company_id": data.get("company_id", None),  # Optional field
+        "company_id": company_id,
         "event_type": data["event_type"],
         "page_url": data["page_url"],
         "element_selector": data.get("element_selector"),
@@ -42,7 +82,7 @@ def send_event():
         "last_page_url": data.get("last_page_url"),
         "user_agent": request.headers.get("User-Agent"),
         "ip_address": request.remote_addr,
-        "device_type": data.get("device_type", "desktop"),  # Default to "desktop" if not provided
+        "device_type": data.get("device_type", "desktop"),
         "browser": data.get("browser"),
         "os": data.get("os"),
         "country": data.get("country"),
@@ -50,8 +90,8 @@ def send_event():
         "region": data.get("region"),
         "x_coordinate": data.get("x_coordinate"),
         "y_coordinate": data.get("y_coordinate"),
-        "session_duration_seconds": data.get("session_duration_seconds", 0),  # Default to 0 if not provided
-        "metadata": data.get("metadata", {})  # Store as an empty dict if not provided
+        "session_duration_seconds": data.get("session_duration_seconds", 0),
+        "metadata": data.get("metadata", {})
     }
     
     # Send event to Kafka
