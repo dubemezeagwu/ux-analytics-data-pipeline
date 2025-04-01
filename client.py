@@ -53,7 +53,7 @@ COMPANIES = {
 
 USER_COMPANIES = {user_id: COMPANY_IDS[user_id] for user_id in USER_IDS}
 
-START_DATE = datetime(2025, 2, 1)
+START_DATE = datetime(2025, 1, 1)
 END_DATE = datetime(2025, 3, 31)
 TOTAL_EVENTS = 100000
 
@@ -130,7 +130,7 @@ def process_events(event_queue):
     events_generated = 0
 
     while current_date <= END_DATE and events_generated < TOTAL_EVENTS:
-        daily_users = random.sample(USER_IDS, k=random.randint(1, 25))  # Pick a random set of active users per day
+        daily_users = random.sample(USER_IDS, k=random.randint(50, 250))  # Pick a random set of active users per day
         print(f"Generating events for {current_date.strftime('%Y-%m-%d')} with {len(daily_users)} users...")
 
         for user_id in daily_users:
@@ -160,9 +160,9 @@ def event_sender_worker(event_queue):
 
 if __name__ == "__main__":
     event_queue = Queue()
-    with ThreadPoolExecutor(max_workers=500) as executor:
+    with ThreadPoolExecutor(max_workers=200) as executor:
         executor.submit(process_events, event_queue)
-        for _ in range(500):
+        for _ in range(100):
             executor.submit(event_sender_worker, event_queue)
 
         event_queue.join()
