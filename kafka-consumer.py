@@ -92,6 +92,5 @@ for message in consumer:
         conn.rollback()
         print("❌ Database insert error:", str(e))
 
-# Close the database connection when the script terminates
 cursor.close()
 conn.close()

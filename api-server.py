@@ -66,7 +66,6 @@ def send_event():
     if company_id and company_id not in company_set:
         return jsonify({"error": "Company not found ", "company_id": company_id}), 403  # Drop event if company is not in DB
     
-    # Construct event object
     event = {
         "event_id": str(uuid.uuid4()),
         "event_timestamp": data["event_timestamp"],
@@ -94,7 +93,6 @@ def send_event():
         "metadata": data.get("metadata", {})
     }
     
-    # Send event to Kafka
     producer.send(topic, event)
     print(f"Produced: {event}")
     return jsonify({"message": "Event sent successfully"}), 200
